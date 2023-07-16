@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spirals</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const vertexShader = `
+        varying vec2 vUv;
+
+        uniform float time;
+        uniform float speed;
+        uniform float amplitude;
+        uniform float frequency;
+        uniform float numSquares;
+
+        void main() {
+          vUv = uv;
+          float distance = distance(uv, vec2(0.5));
+          float angle = atan(uv.y - 0.5, uv.x - 0.5);
+          float rotation = -time * speed; // Rotate in the opposite direction by negating the time
+          float distortion = sin(distance * frequency + rotation) * amplitude * (1.0 - distance);
+          vec2 distortedUV = vec2(
+            0.5 + (uv.x - 0.5) * (1.0 + distortion),
+            0.5 + (uv.y - 0.5) * (1.0 + distortion)
+          );
+          vUv = distortedUV;
+
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `;
+
+      const fragmentShader = `
+        varying vec2 vUv;
+
+        uniform float time;
+        uniform float speed;
+        uniform float amplitude;
+        uniform float frequency;
+        uniform float numSquares;
+
+        void main() {
+          vec2 uv = vUv;
+          float distance = distance(uv, vec2(0.5));
+          float angle = atan(uv.y - 0.5, uv.x - 0.5);
+          float rotation = -time * speed; // Rotate in the opposite direction by negating the time
+          float distortion = sin(distance * frequency + rotation) * amplitude * (1.0 - distance);
+          uv += vec2(cos(angle + rotation * mod(gl_FragCoord.y, numSquares) * 0.5 + distortion),
+                     sin(angle + rotation * mod(gl_FragCoord.y, numSquares) * 0.5 + distortion));
+
+          // Apply the spiraling effect to the texture coordinates
+          vec2 distortedUV = vec2(
+            0.5 + (uv.x - 0.5) * (1.0 + distortion),
+            0.5 + (uv.y - 0.5) * (1.0 + distortion)
+          );
+
+          float gradient = 0.1 + 0.9 * (1.0 - abs(sin(uv.x * uv.y * 3.14)));
+
+          // Darken the color
+          vec3 color = vec3(0, gradient, gradient);
+
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `;
+
+      let currentFrame, previousFrame, plane, shaderMaterial;
+
+      function init() {
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        currentFrame = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+        previousFrame = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+
+        const planeGeometry = new THREE.PlaneGeometry(2, 2);
+        shaderMaterial = new THREE.ShaderMaterial({
+          uniforms: {
+            time: { value: 0.0 },
+            speed: { value: 0.05 }, // Adjust the speed of rotation and distortion
+            amplitude: { value: 5.7 }, // Adjust the amplitude of distortion
+            frequency: { value: 10.0 }, // Adjust the frequency of distortion
+            numSquares: { value: 3.0 } // Adjust the number of squares
+          },
+          vertexShader: vertexShader,
+          fragmentShader: fragmentShader,
+        });
+
+        plane = new THREE.Mesh(planeGeometry, shaderMaterial);
+        scene.add(plane);
+
+        // Create rotating boxes
+        const boxGeometry = new THREE.BoxGeometry(50, 50, 50);
+        const boxMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const boxes = [];
+
+        for (let i = 0; i < 100; i++) {
+          const box = new THREE.Mesh(boxGeometry, boxMaterial);
+          box.position.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1);
+          box.rotation.set(Math.random(), Math.random(), Math.random());
+          scene.add(box);
+          boxes.push(box);
+        }
+
+        camera.position.z = 1;
+
+        function render(time) {
+          shaderMaterial.uniforms.time.value = time * 0.001; // Convert time to seconds
+
+          renderer.setRenderTarget(currentFrame);
+          renderer.render(scene, camera);
+          renderer.setRenderTarget(null);
+
+          const temp = currentFrame;
+          currentFrame = previousFrame;
+          previousFrame = temp;
+
+          shaderMaterial.uniforms.prevFrame = { value: previousFrame.texture };
+
+          renderer.render(scene, camera);
+
+          for (let i = 0; i < boxes.length; i++) {
+            const box = boxes[i];
+            box.rotation.x += 0.01;
+            box.rotation.y -= 0.01;
+          }
+
+          requestAnimationFrame(render);
+        }
+
+        render();
+      }
+
+      init();
+    });
+  </script>
+</body>
+</html>
